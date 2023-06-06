@@ -5,14 +5,19 @@ namespace Cameca.CustomAnalysis.ContingencyTable3D;
 
 public class ContingencyTable3DOptions : BindableBase
 {
-    /* Example of a "Bindable" property. Properties of this form will notify the analysis that they have been changed.
-    private int count;
-    [Display(Name = "Ion Count")]
-    // [Display(AutoGenerateField = false)]  // An example of how to hide the property from the property editor
-    public int Count
+    private int blockSize;
+    [Display(Name = "Block Size", Description = "[0-1000] (atoms)")]
+    public int BlockSize
     {
-        get => count;
-        set => SetProperty(ref count, value);
+        get => blockSize;
+        set => SetProperty(ref blockSize, value);
     }
-    //*/
+
+    private int binSize;
+    [Display(Name = "Bin Size", Description = "Must be no greater than block size (ions)")]
+    public int BinSize
+    {
+        get => binSize;
+        set => SetProperty(ref binSize, value);
+    }
 }
