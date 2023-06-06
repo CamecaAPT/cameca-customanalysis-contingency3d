@@ -4,6 +4,7 @@ using Cameca.CustomAnalysis.Utilities.Legacy;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Windows;
 using System.Windows.Documents;
@@ -59,8 +60,60 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
          */
         outBuilder.AppendLine(GetLimits(ionData, viewBuilder));
 
+        /*
+         * Make ion grid
+         */
+        MakeIonGrid(ionData, options.BlockSize, options.BinSize);
+
         //Output the outBuilder string
         viewBuilder.AddText("3DCT Output", outBuilder.ToString());
+    }
+
+    private static void MakeIonGrid(IIonData ionData, int ionsPerBlock, int ionsPerBin)
+    {
+        string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
+
+        var min = ionData.Extents.Min;
+        var max = ionData.Extents.Max;
+        Vector3 diff = max - min;
+        ulong totalIons = 0;
+        foreach(ulong ionCount in ionData.GetIonTypeCounts().Values)
+            totalIons += ionCount;
+
+        double volume = diff.X * diff.Y * diff.Z;
+        double spacing = Math.Pow(volume * ionsPerBlock / totalIons, 1.0/3.0); //take cube root of volume per block to get length of block
+        int rows = (ionsPerBlock + 1) / ionsPerBin;
+        if((ionsPerBlock + 1) % ionsPerBin > 0)
+            rows++;
+        int columns = rows;
+
+        int numGridX = (int)(diff.X / spacing) + 1;
+        int numGridY = (int)(diff.Y / spacing) + 1;
+        int gridElements = numGridX * numGridY;
+
+        int[,] ionGrid = new int[numGridX, numGridY];
+        int totalBlocks = 0;
+
+        foreach (var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
+        {
+            var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
+            var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
+
+            //get a count of the total amount of blocks
+            for(int i = 0; i < positions.Length; i++)
+            {
+                if (ionTypes[i] == 255) continue;
+
+                int ionX = (int)((positions[i].X - min.X) / spacing);
+                int ionY = (int)((positions[i].Y - min.Y) / spacing);
+                ionGrid[ionX, ionY]++;
+                if (ionGrid[ionX, ionY] == ionsPerBlock)
+                {
+                    totalBlocks++;
+                    ionGrid[ionX, ionY] = 0;
+                }
+            }
+        }
     }
 
     private static string GetLimits(IIonData ionData, IViewBuilder viewBuilder)
