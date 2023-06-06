@@ -15,6 +15,9 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     //Node ID
     public Guid ID { get; set; }
 
+    //Constants
+    const int ROUNDING_LENGTH = 3;
+
     /*
      * Services
      */
@@ -51,28 +54,53 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
          */
         outBuilder.AppendLine(GetBasicIonInfo(ionData, viewBuilder));
 
+        /*
+         * Get Limits
+         */
+        outBuilder.AppendLine(GetLimits(ionData, viewBuilder));
+
         //Output the outBuilder string
         viewBuilder.AddText("3DCT Output", outBuilder.ToString());
+    }
+
+    private static string GetLimits(IIonData ionData, IViewBuilder viewBuilder)
+    {
+        StringBuilder outBuilder = new();
+        List<LimitsRow> limitsRows = new();
+
+        var Min = ionData.Extents.Min;
+        var Max = ionData.Extents.Max;
+
+        limitsRows.Add(new LimitsRow("X", Min.X.ToString($"f{ROUNDING_LENGTH}"), Max.X.ToString($"f{ROUNDING_LENGTH}")));
+        limitsRows.Add(new LimitsRow("Y", Min.Y.ToString($"f{ROUNDING_LENGTH}"), Max.Y.ToString($"f{ROUNDING_LENGTH}")));
+        limitsRows.Add(new LimitsRow("Z", Min.Z.ToString($"f{ROUNDING_LENGTH}"), Max.Z.ToString($"f{ROUNDING_LENGTH}")));
+
+        outBuilder.AppendLine($"X limits: {Min.X.ToString($"f{ROUNDING_LENGTH}")} to {Max.X.ToString($"f{ROUNDING_LENGTH}")}");
+        outBuilder.AppendLine($"Y limits: {Min.Y.ToString($"f{ROUNDING_LENGTH}")} to {Max.Y.ToString($"f{ROUNDING_LENGTH}")}");
+        outBuilder.AppendLine($"Z limits: {Min.Z.ToString($"f{ROUNDING_LENGTH}")} to {Max.Z.ToString($"f{ROUNDING_LENGTH}")}");
+
+        viewBuilder.AddTable("Limits", limitsRows);
+        return outBuilder.ToString();
     }
 
     private static string GetBasicIonInfo(IIonData ionData, IViewBuilder viewBuilder)
     {
         StringBuilder outBuilder = new();
-        List<RangeCountRow> RangeCountRows = new();
+        List<RangeCountRow> rangeCountRows = new();
         var typeCounts = ionData.GetIonTypeCounts();
         ulong totalRangedIons = 0;
         for(int i=0; i<typeCounts.Count; i++)
         {
             var thisIon = typeCounts.ElementAt(i);
             totalRangedIons += thisIon.Value;
-            RangeCountRows.Add(new RangeCountRow(i + 1, thisIon.Key.Name, thisIon.Value));
+            rangeCountRows.Add(new RangeCountRow(i + 1, thisIon.Key.Name, thisIon.Value));
             outBuilder.AppendLine($"range {i + 1}: {thisIon.Key.Name} \t=\t{thisIon.Value}");
         }
         outBuilder.AppendLine($"Total Ions \t=\t{ionData.IonCount}");
         outBuilder.AppendLine();
         outBuilder.AppendLine($"Ions in ranges = {totalRangedIons}, total events = {ionData.IonCount}");
 
-        viewBuilder.AddTable("Range and Ion Info", RangeCountRows);
+        viewBuilder.AddTable("Range and Ion Info", rangeCountRows);
         return outBuilder.ToString();
     }
 
@@ -98,5 +126,19 @@ public class RangeCountRow
         this.Number = number;
         this.Name = name;
         this.Count = Count;
+    }
+}
+
+public class LimitsRow
+{
+    public string Dimension { get; set; }
+    public string Min { get; set; }
+    public string Max { get; set; }
+
+    public LimitsRow(string dimension, string min, string max)
+    {
+        Dimension = dimension;
+        Min = min;
+        Max = max;
     }
 }
