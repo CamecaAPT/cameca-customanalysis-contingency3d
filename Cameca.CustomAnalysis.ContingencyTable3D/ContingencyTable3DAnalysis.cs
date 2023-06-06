@@ -84,16 +84,72 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
          */
         var totalBlocks = GetTotalBlocks(ionData, options.BlockSize, min, numGridX, numGridY, spacing);
 
-        outBuilder.AppendLine(totalBlocks.ToString());
+        /*
+         * Contingency Main
+         */
+        CalculateContingencyTables(ionData, min, numGridX, numGridY, spacing, options.BlockSize, totalBlocks);
 
         //Output the outBuilder string
         viewBuilder.AddText("3DCT Output", outBuilder.ToString());
     }
 
-    private static void CalculateContingencyTables(IIonData ionData, int blockSize, int binSize)
+    //individual contingnecy tables are per range combination (1 for Fe and Ni, 1 for Fe and Cu, etc)
+    private static void CalculateContingencyTables(IIonData ionData, Vector3 min, int numGridX, int numGridY, double spacing, int blockSize, int totalBlocks)
     {
         string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
 
+        var numIonsTypes = ionData.GetIonTypeCounts().Count;
+
+        foreach(var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
+        {
+            var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
+            var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
+
+            for(int ionType1 = 0; ionType1 < numIonsTypes; ionType1++)
+            {
+                for(int ionType2 = ionType1 + 1; ionType2 < numIonsTypes; ionType2++)
+                {
+                    //these are all the amount of grid elements
+                    int[,] ionGrid = new int[numGridX, numGridY];
+                    int[,] type1Grid = new int[numGridX, numGridY];
+                    int[,] type2Grid = new int[numGridX, numGridY];
+
+                    //these are the amount of blocks
+                    int[] type1InBlock = new int[totalBlocks + 1];
+                    int[] type2InBlock = new int[totalBlocks + 1];
+
+                    //could try to remove data from positions (read only span, would need to copy somehow. may defeat purpose)
+                    for(int ionIndex=0, blockIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
+                    {
+                        byte elementType = ionTypes[ionIndex];
+                        if (elementType == 255) continue;
+
+                        int ionX = (int)((positions[ionIndex].X - min.X) / spacing);
+                        int ionY = (int)((positions[ionIndex].Y - min.Y) / spacing);
+
+                        if (elementType == ionType1) type1Grid[ionX, ionY]++;
+                        if (elementType == ionType2) type2Grid[ionX, ionY]++;
+                        ionGrid[ionX, ionY]++;
+
+                        if (ionGrid[ionX, ionY] >= blockSize)
+                        {
+                            type1InBlock[blockIndex] = type1Grid[ionX, ionY];
+                            type2InBlock[blockIndex] = type2Grid[ionX, ionY];
+                            blockIndex++;
+                            ionGrid[ionX, ionY] = 0;
+                            type1Grid[ionX, ionY] = 0;
+                            type2Grid[ionX, ionY] = 0;
+                        }
+                    }
+
+                    CalculateContingencyTable();
+                }
+            }
+        }
+    }
+
+    private static void CalculateContingencyTable()
+    {
 
     }
 
