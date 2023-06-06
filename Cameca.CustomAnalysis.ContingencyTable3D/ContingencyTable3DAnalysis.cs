@@ -61,35 +61,45 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         outBuilder.AppendLine(GetLimits(ionData, viewBuilder));
 
         /*
+         * Basic Calculations
+         */
+        ulong totalRangedIons = 0;
+        foreach (ulong ionCount in ionData.GetIonTypeCounts().Values)
+            totalRangedIons += ionCount;
+        var min = ionData.Extents.Min;
+        var max = ionData.Extents.Max;
+        Vector3 diff = max - min;
+        double volume = diff.X * diff.Y * diff.Z;
+        double spacing = Math.Pow(volume * options.BlockSize / totalRangedIons, 1.0 / 3.0); //take cube root of volume per block to get length of block
+        int numGridX = (int)(diff.X / spacing) + 1;
+        int numGridY = (int)(diff.Y / spacing) + 1;
+        int gridElements = numGridX * numGridY;
+        int rows = (options.BlockSize + 1) / options.BinSize;
+        if ((options.BlockSize + 1) % options.BinSize > 0)
+            rows++;
+        int columns = rows;
+
+        /*
          * Get Total Blocks
          */
-        var totalBlocks = GetTotalBlocks(ionData, options.BlockSize, options.BinSize);
+        var totalBlocks = GetTotalBlocks(ionData, options.BlockSize, min, numGridX, numGridY, spacing);
+
+        outBuilder.AppendLine(totalBlocks.ToString());
 
         //Output the outBuilder string
         viewBuilder.AddText("3DCT Output", outBuilder.ToString());
     }
 
-    private static int GetTotalBlocks(IIonData ionData, int ionsPerBlock, int ionsPerBin)
+    private static void CalculateContingencyTables(IIonData ionData, int blockSize, int binSize)
     {
         string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
 
-        var min = ionData.Extents.Min;
-        var max = ionData.Extents.Max;
-        Vector3 diff = max - min;
-        ulong totalIons = 0;
-        foreach(ulong ionCount in ionData.GetIonTypeCounts().Values)
-            totalIons += ionCount;
 
-        double volume = diff.X * diff.Y * diff.Z;
-        double spacing = Math.Pow(volume * ionsPerBlock / totalIons, 1.0/3.0); //take cube root of volume per block to get length of block
-        int rows = (ionsPerBlock + 1) / ionsPerBin;
-        if((ionsPerBlock + 1) % ionsPerBin > 0)
-            rows++;
-        int columns = rows;
+    }
 
-        int numGridX = (int)(diff.X / spacing) + 1;
-        int numGridY = (int)(diff.Y / spacing) + 1;
-        int gridElements = numGridX * numGridY;
+    private static int GetTotalBlocks(IIonData ionData, int blockSize, Vector3 min, int numGridX, int numGridY, double spacing)
+    {
+        string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
 
         int[,] ionGrid = new int[numGridX, numGridY];
         int totalBlocks = 0;
@@ -107,7 +117,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                 int ionX = (int)((positions[i].X - min.X) / spacing);
                 int ionY = (int)((positions[i].Y - min.Y) / spacing);
                 ionGrid[ionX, ionY]++;
-                if (ionGrid[ionX, ionY] == ionsPerBlock)
+                if (ionGrid[ionX, ionY] == blockSize)
                 {
                     totalBlocks++;
                     ionGrid[ionX, ionY] = 0;
