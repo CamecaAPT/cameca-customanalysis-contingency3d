@@ -26,6 +26,9 @@
 		<EmbedUntrackedSources>true</EmbedUntrackedSources>
 		<IncludeSymbols>true</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PackageIcon>Cameca.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<IncludeBuildOutput>true</IncludeBuildOutput>
 		<NuspecFile>Package.nuspec</NuspecFile>
 	</PropertyGroup>
