@@ -61,15 +61,15 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         outBuilder.AppendLine(GetLimits(ionData, viewBuilder));
 
         /*
-         * Make ion grid
+         * Get Total Blocks
          */
-        MakeIonGrid(ionData, options.BlockSize, options.BinSize);
+        var totalBlocks = GetTotalBlocks(ionData, options.BlockSize, options.BinSize);
 
         //Output the outBuilder string
         viewBuilder.AddText("3DCT Output", outBuilder.ToString());
     }
 
-    private static void MakeIonGrid(IIonData ionData, int ionsPerBlock, int ionsPerBin)
+    private static int GetTotalBlocks(IIonData ionData, int ionsPerBlock, int ionsPerBin)
     {
         string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
 
@@ -114,6 +114,8 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                 }
             }
         }
+
+        return totalBlocks;
     }
 
     private static string GetLimits(IIonData ionData, IViewBuilder viewBuilder)
