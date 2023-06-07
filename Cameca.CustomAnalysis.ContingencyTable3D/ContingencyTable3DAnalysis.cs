@@ -103,32 +103,32 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         var numIonsTypes = ionData.GetIonTypeCounts().Count;
         string[] ionNames = new string[numIonsTypes];
         int index = 0;
-        foreach(var ionName in ionData.GetIonTypeCounts().Keys)
+        foreach (var ionName in ionData.GetIonTypeCounts().Keys)
         {
             ionNames[index] = ionName.Name;
             index++;
         }
 
-        foreach(var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
+        for (int ionType1 = 0; ionType1 < numIonsTypes; ionType1++)
         {
-            var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
-            var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
-
-            for(int ionType1 = 0; ionType1 < numIonsTypes; ionType1++)
+            for (int ionType2 = ionType1 + 1; ionType2 < numIonsTypes; ionType2++)
             {
-                for(int ionType2 = ionType1 + 1; ionType2 < numIonsTypes; ionType2++)
+                //these are the amount of blocks
+                int[] type1InBlock = new int[totalBlocks + 1];
+                int[] type2InBlock = new int[totalBlocks + 1];
+
+                foreach (var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
                 {
+                    var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
+                    var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
+
                     //these are all the amount of grid elements
                     int[,] ionGrid = new int[numGridX, numGridY];
                     int[,] type1Grid = new int[numGridX, numGridY];
                     int[,] type2Grid = new int[numGridX, numGridY];
 
-                    //these are the amount of blocks
-                    int[] type1InBlock = new int[totalBlocks + 1];
-                    int[] type2InBlock = new int[totalBlocks + 1];
-
                     //could try to remove data from positions (read only span, would need to copy somehow. may defeat purpose)
-                    for(int ionIndex = 0, blockIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
+                    for (int ionIndex = 0, blockIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
                     {
                         byte elementType = ionTypes[ionIndex];
                         if (elementType == 255) continue;
@@ -150,9 +150,8 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                             type2Grid[ionX, ionY] = 0;
                         }
                     }
-
-                    outBuilder.AppendLine(CalculateContingencyTable(rows, rows, type1InBlock, type2InBlock, totalBlocks, binSize, ionNames, ionType1, ionType2, blockSize));
                 }
+                outBuilder.AppendLine(CalculateContingencyTable(rows, rows, type1InBlock, type2InBlock, totalBlocks, binSize, ionNames, ionType1, ionType2, blockSize));
             }
         }
 
