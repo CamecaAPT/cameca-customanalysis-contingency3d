@@ -202,9 +202,58 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         }
         (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, estimatedArr, "Estimated Values");
         sb.AppendLine(message);
+
         //calculate X-square
         sb.AppendLine(CalculateXSquare(rows, experimentalArr, estimatedArr, non0Rows, non0Cols));
 
+        //calculate and output difference values
+        double[,] differenceArr = new double[rows, columns];
+        for(int row = 0; row < rows; row++)
+        {
+            for(int col = 0; col < columns; col++)
+            {
+                differenceArr[row, col] = experimentalArr[row, col] - estimatedArr[row, col];
+            }
+        }
+        (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, differenceArr, "Difference Values");
+        sb.AppendLine(message);
+
+        //Do Trend Analysis
+        sb.AppendLine(TrendAnalysis(differenceArr));
+
+
+        return sb.ToString();
+    }
+
+    private static string TrendAnalysis(double[,] differenceArr)
+    {
+        StringBuilder sb = new();
+
+        sb.AppendLine("Trend Analysis");
+        //set up columns
+        sb.Append("\t");
+        for (int col = 0; col < differenceArr.GetLength(1); col++)
+        {
+            sb.Append($"{col}\t");
+        }
+        sb.AppendLine();
+
+        for (int row = 0; row < differenceArr.GetLength(0); row++)
+        {
+            sb.Append($"{row}\t");
+            for(int col = 0; col < differenceArr.GetLength(1); col++)
+            {
+                string output;
+                if (differenceArr[row, col] < 0)
+                    output = "-";
+                else if (differenceArr[row, col] > 0)
+                    output = "+";
+                else
+                    output = " ";
+                sb.Append($"{output}\t");
+            }
+            sb.AppendLine();
+        }
 
         return sb.ToString();
     }
@@ -283,7 +332,6 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             }
             sb.AppendLine($"{totalObservations}");
         }
-        sb.AppendLine();
 
         return (sb.ToString(), non0Rows, non0Cols);
     }
