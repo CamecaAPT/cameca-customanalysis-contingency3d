@@ -7,6 +7,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 
 namespace Cameca.CustomAnalysis.ContingencyTable3D;
@@ -162,8 +163,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     {
         StringBuilder sb = new();
 
-        int[,] experimentalArr = new int[rows, columns];
-        double[,] estimatedArr = new double[rows, columns];
+        double[,] experimentalArr = new double[rows, columns];
         int totalObservations = 0;
 
         for(int i=0; i<totalBlocks; i++)
@@ -178,9 +178,9 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         {
             for(int col = 0; col < columns; col++)
             {
-                marginalTotalsRows[row] += experimentalArr[row, col];
-                marginalTotalsCols[col] += experimentalArr[row, col];
-                totalObservations += experimentalArr[row, col];
+                marginalTotalsRows[row] += (int)experimentalArr[row, col];
+                marginalTotalsCols[col] += (int)experimentalArr[row, col];
+                totalObservations += (int)experimentalArr[row, col];
             }
         }
         if(totalObservations <= 0)
@@ -188,23 +188,61 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             //TODO: do something
         }
 
-        sb.AppendLine(PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, experimentalArr, marginalTotalsRows, marginalTotalsCols, totalObservations));
+        (var message, var non0Rows, var non0Cols) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, experimentalArr, marginalTotalsRows, marginalTotalsCols, totalObservations, "Experimental Observations");
+        sb.AppendLine(message);
+
+        //calculate estimated observations
+        double[,] estimatedArr = new double[rows, columns];
+        for (int row = 0; row < rows; row++)
+        {
+            for(int col = 0; col < columns; col++)
+            {
+                estimatedArr[row, col] = (double) (marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
+            }
+        }
+        (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, estimatedArr, "Estimated Values");
+        sb.AppendLine(message);
+        //calculate X-square
+        sb.AppendLine(CalculateXSquare(rows, experimentalArr, estimatedArr, non0Rows, non0Cols));
+
 
         return sb.ToString();
     }
 
-    private static string PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, int[,] dataArray)
+    private static string CalculateXSquare(int rows, double[,] experimentalArr, double[,] estimatedArr, int non0Rows, int non0Cols)
     {
-        return PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, dataArray, null, null, -1);
+        StringBuilder sb = new();
+        double xSquare = 0;
+
+        for (int row = 0; row < rows; row++)
+        {
+            for(int col = 0; col < rows; col++)
+            {
+                if (estimatedArr[row, col] > 0.01) //this is baked into M. K. Miller's Script
+                    xSquare += ((experimentalArr[row, col] - estimatedArr[row, col]) * (experimentalArr[row, col] - estimatedArr[row, col])) / estimatedArr[row, col];
+            }
+        }
+
+        int degreesOfFreedom = (rows - 1) * (rows - 1);
+        int reduced = (non0Cols - 1) * (non0Rows - 1);
+
+        sb.AppendLine($"X-square = {xSquare.ToString($"f{ROUNDING_LENGTH}")} with {degreesOfFreedom} degrees of freedom (reduced = {reduced})");
+
+        return sb.ToString();
     }
 
-    private static string PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, int[,] dataArray, int[]? marginalTotalRows, int[]? marginalTotalCols, int totalObservations)
+    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, double[,] dataArray, string title)
+    {
+        return PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, dataArray, null, null, -1, title);
+    }
+
+    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, double[,] dataArray, int[]? marginalTotalRows, int[]? marginalTotalCols, int totalObservations, string title)
     {
         StringBuilder sb = new();
         int non0Cols = 0;
         int non0Rows = 0;
 
-        sb.AppendLine("Experimental Observations");
+        sb.AppendLine($"{title}");
         sb.Append($"\t{ionNames[ionType2]}\n{ionNames[ionType1]}\t");
 
         //set up columns (square matrix, thats why row and col is interchangable)
@@ -215,7 +253,8 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             sb.Append($"{startIndex}-{endIndex}\t");
         }
         if(marginalTotalRows != null)
-            sb.AppendLine("total");
+            sb.Append("total");
+        sb.AppendLine();
 
         for(int row = 0; row < rows; row++)
         {
@@ -224,12 +263,14 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             sb.Append($"{startIndex}-{endIndex}\t");
             for(int col = 0; col < rows; col++)
             {
-                sb.Append($"{dataArray[row, col]}\t");
+                string formatString = (marginalTotalCols == null) ? "f1" : "";
+                sb.Append($"{dataArray[row, col].ToString($"{formatString}")}\t");
             }
             if (marginalTotalRows != null && marginalTotalRows[row] > 0) 
                 non0Rows++;
             if (marginalTotalRows != null)
-                sb.AppendLine($"{marginalTotalRows[row]}");
+                sb.Append($"{marginalTotalRows[row]}");
+            sb.AppendLine();
         }
         if (marginalTotalRows != null && marginalTotalCols != null)
         {
@@ -244,7 +285,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         }
         sb.AppendLine();
 
-        return sb.ToString();
+        return (sb.ToString(), non0Rows, non0Cols);
     }
 
     private static int GetTotalBlocks(IIonData ionData, int blockSize, Vector3 min, int numGridX, int numGridY, double spacing)
