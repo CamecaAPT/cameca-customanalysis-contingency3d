@@ -87,18 +87,27 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         /*
          * Contingency Main
          */
-        CalculateContingencyTables(ionData, min, numGridX, numGridY, spacing, options.BlockSize, totalBlocks);
+        outBuilder.AppendLine(CalculateContingencyTables(ionData, min, numGridX, numGridY, spacing, options.BlockSize, totalBlocks, rows, options.BinSize));
 
         //Output the outBuilder string
         viewBuilder.AddText("3DCT Output", outBuilder.ToString());
     }
 
     //individual contingnecy tables are per range combination (1 for Fe and Ni, 1 for Fe and Cu, etc)
-    private static void CalculateContingencyTables(IIonData ionData, Vector3 min, int numGridX, int numGridY, double spacing, int blockSize, int totalBlocks)
+    private static string CalculateContingencyTables(IIonData ionData, Vector3 min, int numGridX, int numGridY, double spacing, int blockSize, int totalBlocks, int rows, int binSize)
     {
+        StringBuilder outBuilder = new();
+
         string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
 
         var numIonsTypes = ionData.GetIonTypeCounts().Count;
+        string[] ionNames = new string[numIonsTypes];
+        int index = 0;
+        foreach(var ionName in ionData.GetIonTypeCounts().Keys)
+        {
+            ionNames[index] = ionName.Name;
+            index++;
+        }
 
         foreach(var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
         {
@@ -119,7 +128,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                     int[] type2InBlock = new int[totalBlocks + 1];
 
                     //could try to remove data from positions (read only span, would need to copy somehow. may defeat purpose)
-                    for(int ionIndex=0, blockIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
+                    for(int ionIndex = 0, blockIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
                     {
                         byte elementType = ionTypes[ionIndex];
                         if (elementType == 255) continue;
@@ -142,15 +151,101 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                         }
                     }
 
-                    CalculateContingencyTable();
+                    outBuilder.AppendLine(CalculateContingencyTable(rows, rows, type1InBlock, type2InBlock, totalBlocks, binSize, ionNames, ionType1, ionType2, blockSize));
                 }
             }
         }
+
+        return outBuilder.ToString();
     }
 
-    private static void CalculateContingencyTable()
+    private static string CalculateContingencyTable(int rows, int columns, int[] type1InBlock, int[] type2InBlock, int totalBlocks, int binSize, string[] ionNames, int ionType1, int ionType2, int blockSize)
     {
+        StringBuilder sb = new();
 
+        int[,] experimentalArr = new int[rows, columns];
+        double[,] estimatedArr = new double[rows, columns];
+        int totalObservations = 0;
+
+        for(int i=0; i<totalBlocks; i++)
+        {
+            experimentalArr[type1InBlock[i] / binSize, type2InBlock[i] / binSize]++;
+        }
+
+        //marginal totals
+        int[] marginalTotalsRows = new int[rows];
+        int[] marginalTotalsCols = new int[columns];
+        for(int row = 0; row < rows; row++)
+        {
+            for(int col = 0; col < columns; col++)
+            {
+                marginalTotalsRows[row] += experimentalArr[row, col];
+                marginalTotalsCols[col] += experimentalArr[row, col];
+                totalObservations += experimentalArr[row, col];
+            }
+        }
+        if(totalObservations <= 0)
+        {
+            //TODO: do something
+        }
+
+        sb.AppendLine(PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, experimentalArr, marginalTotalsRows, marginalTotalsCols, totalObservations));
+
+        return sb.ToString();
+    }
+
+    private static string PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, int[,] dataArray)
+    {
+        return PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, dataArray, null, null, -1);
+    }
+
+    private static string PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, int[,] dataArray, int[]? marginalTotalRows, int[]? marginalTotalCols, int totalObservations)
+    {
+        StringBuilder sb = new();
+        int non0Cols = 0;
+        int non0Rows = 0;
+
+        sb.AppendLine("Experimental Observations");
+        sb.Append($"\t{ionNames[ionType2]}\n{ionNames[ionType1]}\t");
+
+        //set up columns (square matrix, thats why row and col is interchangable)
+        for(int col = 0; col < rows; col++)
+        {
+            int startIndex = col * binSize;
+            int endIndex = Math.Min( ((col + 1) * binSize) - 1 , blockSize);
+            sb.Append($"{startIndex}-{endIndex}\t");
+        }
+        if(marginalTotalRows != null)
+            sb.AppendLine("total");
+
+        for(int row = 0; row < rows; row++)
+        {
+            int startIndex = row * binSize;
+            int endIndex = Math.Min(((row + 1) * binSize) - 1, blockSize);
+            sb.Append($"{startIndex}-{endIndex}\t");
+            for(int col = 0; col < rows; col++)
+            {
+                sb.Append($"{dataArray[row, col]}\t");
+            }
+            if (marginalTotalRows != null && marginalTotalRows[row] > 0) 
+                non0Rows++;
+            if (marginalTotalRows != null)
+                sb.AppendLine($"{marginalTotalRows[row]}");
+        }
+        if (marginalTotalRows != null && marginalTotalCols != null)
+        {
+            sb.Append($"total\t");
+            for (int col = 0; col < rows; col++)
+            {
+                if (marginalTotalCols[col] > 0)
+                    non0Cols++;
+                sb.Append($"{marginalTotalCols[col]}\t");
+            }
+            sb.AppendLine($"{totalObservations}");
+        }
+        sb.AppendLine();
+
+        return sb.ToString();
     }
 
     private static int GetTotalBlocks(IIonData ionData, int blockSize, Vector3 min, int numGridX, int numGridY, double spacing)
