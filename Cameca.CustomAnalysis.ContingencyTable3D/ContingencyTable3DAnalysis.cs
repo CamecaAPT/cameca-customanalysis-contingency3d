@@ -323,6 +323,9 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <returns>A formatted string to display the relevent X-squared data</returns>
     private static string CalculateXSquare(int rows, double[,] experimentalArr, double[,] estimatedArr, int non0Rows, int non0Cols)
     {
+        double[] P = { 0.250f, 0.1f, 0.05f, 0.025f, 0.01f, 0.005f, 0.001f };
+        double[] X = { 0.6745f, 1.2816f, 1.6449f, 1.96f, 2.3263f, 2.5758f, 3.0902f };
+
         StringBuilder sb = new();
         double xSquare = 0;
 
@@ -339,6 +342,18 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         int reduced = (non0Cols - 1) * (non0Rows - 1);
 
         sb.AppendLine($"X-square = {xSquare.ToString($"f{ROUNDING_LENGTH}")} with {degreesOfFreedom} degrees of freedom (reduced = {reduced})");
+
+        if(reduced > 0)
+        {
+            for(int i=0; i<X.Length; i++)
+            {
+                double value = .5 * (X[i] + Math.Sqrt(2 * reduced - 1)) * (X[i] + Math.Sqrt(2 * reduced - 1));
+                sb.Append($"P({P[i].ToString($"f{ROUNDING_LENGTH}")}) = {value.ToString($"f{ROUNDING_LENGTH - 1}")}");
+                if (i < X.Length - 1)
+                    sb.Append(", ");
+            }
+        }
+        sb.AppendLine();
 
         return sb.ToString();
     }
