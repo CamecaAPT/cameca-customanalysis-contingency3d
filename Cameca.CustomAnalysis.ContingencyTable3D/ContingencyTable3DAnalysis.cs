@@ -133,27 +133,31 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             index++;
         }
 
+        //these are the amount of blocks
+        int[] type1InBlock = new int[totalBlocks + 1];
+        int[] type2InBlock = new int[totalBlocks + 1];
+
         //every combination of Ion Types needs its own contingency table
         for (int ionType1 = 0; ionType1 < numIonsTypes; ionType1++)
         {
             for (int ionType2 = ionType1 + 1; ionType2 < numIonsTypes; ionType2++)
             {
-                //these are the amount of blocks
-                int[] type1InBlock = new int[totalBlocks + 1];
-                int[] type2InBlock = new int[totalBlocks + 1];
+
+                //these are all the amount of grid elements
+                int[,] ionGrid = new int[numGridX, numGridY];
+                int[,] type1Grid = new int[numGridX, numGridY];
+                int[,] type2Grid = new int[numGridX, numGridY];
+
+                int blockIndex = 0;
 
                 foreach (var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
                 {
                     var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
                     var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
 
-                    //these are all the amount of grid elements
-                    int[,] ionGrid = new int[numGridX, numGridY];
-                    int[,] type1Grid = new int[numGridX, numGridY];
-                    int[,] type2Grid = new int[numGridX, numGridY];
 
                     //could try to remove data from positions (read only span, would need to copy somehow. may defeat purpose)
-                    for (int ionIndex = 0, blockIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
+                    for (int ionIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
                     {
                         byte elementType = ionTypes[ionIndex];
                         if (elementType == 255) continue;
@@ -548,10 +552,13 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         var typeCounts = ionData.GetIonTypeCounts();
         ulong totalRangedIons = 0;
         for(int i=0; i<typeCounts.Count; i++)
+            totalRangedIons += typeCounts.ElementAt(i).Value;
+
+        for (int i=0; i<typeCounts.Count; i++)
         {
             var thisIon = typeCounts.ElementAt(i);
-            totalRangedIons += thisIon.Value;
-            rangeCountRows.Add(new RangeCountRow(i + 1, thisIon.Key.Name, thisIon.Value));
+            string percent = ((double)thisIon.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
+            rangeCountRows.Add(new RangeCountRow(i + 1, thisIon.Key.Name, thisIon.Value, percent));
             outBuilder.AppendLine($"range {i + 1}: {thisIon.Key.Name} \t=\t{thisIon.Value}");
         }
         outBuilder.AppendLine($"Total Ions \t=\t{ionData.IonCount}");
@@ -584,12 +591,14 @@ public class RangeCountRow
     public int Number { get; set; }
     public string Name { get; set; }
     public ulong Count { get; set; }
+    public string Percent { get; set; }
 
-    public RangeCountRow(int number, string name, ulong Count)
+    public RangeCountRow(int number, string name, ulong Count, string percent)
     {
         this.Number = number;
         this.Name = name;
         this.Count = Count;
+        Percent = percent;
     }
 }
 
