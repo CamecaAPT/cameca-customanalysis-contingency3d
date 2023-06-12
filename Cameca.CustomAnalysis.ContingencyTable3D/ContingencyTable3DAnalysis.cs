@@ -1,6 +1,7 @@
 ﻿using Cameca.CustomAnalysis.Interface;
 using Cameca.CustomAnalysis.Utilities;
 using Cameca.CustomAnalysis.Utilities.Legacy;
+using CommunityToolkit.HighPerformance;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -133,15 +134,58 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             index++;
         }
 
-        //these are the amount of blocks
-        int[] type1InBlock = new int[totalBlocks + 1];
-        int[] type2InBlock = new int[totalBlocks + 1];
+        //go through all ions once, populate tables, then compare each ion type
+        int[,] ionGrid = new int[numGridX, numGridY];
+        int[,,] typeGrid = new int[ionNames.Length, numGridX, numGridY];
+        int[,] typeBlock = new int[ionNames.Length, totalBlocks + 1];
+        int blockIndex = 0;
+        foreach (var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
+        {
+            var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
+            var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
 
+            for (int ionIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
+            {
+                byte elementType = ionTypes[ionIndex];
+                if (elementType == 255) continue;
+
+                int ionX = (int)((positions[ionIndex].X - min.X) / spacing);
+                int ionY = (int)((positions[ionIndex].Y - min.Y) / spacing);
+
+                typeGrid[elementType, ionX, ionY]++;
+                ionGrid[ionX, ionY]++;
+
+                if (ionGrid[ionX, ionY] >= blockSize)
+                {
+                    for (int i = 0; i < ionNames.Length; i++)
+                    {
+                        typeBlock[i, blockIndex] = typeGrid[i, ionX, ionY];
+                        typeGrid[i, ionX, ionY] = 0;
+                    }
+                    blockIndex++;
+                    ionGrid[ionX, ionY] = 0;
+                }
+            }
+        }
+        for (int ionType1 = 0; ionType1 < numIonsTypes; ionType1++)
+        {
+            for (int ionType2 = ionType1 + 1; ionType2 < numIonsTypes; ionType2++)
+            {
+                outBuilder.AppendLine(CalculateContingencyTable(rows, typeBlock.GetRow(ionType1).ToArray(), typeBlock.GetRow(ionType2).ToArray(), totalBlocks, binSize, ionNames, ionType1, ionType2, blockSize, viewBuilder));
+            }
+        }
+
+
+        /*
         //every combination of Ion Types needs its own contingency table
         for (int ionType1 = 0; ionType1 < numIonsTypes; ionType1++)
         {
             for (int ionType2 = ionType1 + 1; ionType2 < numIonsTypes; ionType2++)
             {
+
+                //these are the amount of blocks
+                int[] type1InBlock = new int[totalBlocks + 1];
+                int[] type2InBlock = new int[totalBlocks + 1];
 
                 //these are all the amount of grid elements
                 int[,] ionGrid = new int[numGridX, numGridY];
@@ -156,7 +200,6 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                     var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
 
 
-                    //could try to remove data from positions (read only span, would need to copy somehow. may defeat purpose)
                     for (int ionIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
                     {
                         byte elementType = ionTypes[ionIndex];
@@ -183,6 +226,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                 outBuilder.AppendLine(CalculateContingencyTable(rows, type1InBlock, type2InBlock, totalBlocks, binSize, ionNames, ionType1, ionType2, blockSize, viewBuilder));
             }
         }
+        */
 
         return outBuilder.ToString();
     }
