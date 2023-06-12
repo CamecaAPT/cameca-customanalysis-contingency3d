@@ -20,4 +20,12 @@ public class ContingencyTable3DOptions : BindableBase
         get => binSize;
         set => SetProperty(ref binSize, value);
     }
+
+    private bool isDecomposing = true;
+    [Display(Name = "Decompose ions?", Description = "Select for elements only, unselect for compound ions")]
+    public bool Decomposing
+    {
+        get => isDecomposing;
+        set => SetProperty(ref isDecomposing, value);
+    }
 }
