@@ -240,7 +240,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         {
             for(int col = 0; col < rows; col++)
             {
-                estimatedArr[row, col] = (double) (marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
+                estimatedArr[row, col] =  ((double)marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
             }
         }
         (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, estimatedArr, dataTable, "Estimated Values");
