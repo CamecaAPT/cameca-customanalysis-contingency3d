@@ -19,7 +19,7 @@
 
 	<PropertyGroup Label="Package">
 		<Title>ContingencyTable3D</Title>
-		<Authors>Cameca</Authors>
+		<Authors>CAMECA Instruments Inc.</Authors>
 		<Description>3D Contingency Table Extension based off M. K. Miller's 3DCT Script</Description>
 		<Copyright>Copyright © Cameca 2023 All rights reserved.</Copyright>
 		<PublishRepositoryUrl>true</PublishRepositoryUrl>
