@@ -5,6 +5,7 @@ using CommunityToolkit.HighPerformance;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -46,7 +47,8 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         /*
          * Get basic Ion info and Range info
          */
-        outBuilder.AppendLine(GetBasicIonInfo(ionData, viewBuilder));
+        (var message, var totalRangedIons) = GetBasicIonInfo(ionData, viewBuilder, options.Decomposing);
+        outBuilder.AppendLine(message);
 
         /*
          * Get Limits
@@ -56,9 +58,6 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         /*
          * Basic Calculations
          */
-        ulong totalRangedIons = 0;
-        foreach (ulong ionCount in ionData.GetIonTypeCounts().Values)
-            totalRangedIons += ionCount;
         var min = ionData.Extents.Min;
         var max = ionData.Extents.Max;
         Vector3 diff = max - min;
@@ -73,12 +72,12 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         /*
          * Get Total Blocks
          */
-        var totalBlocks = GetTotalBlocks(ionData, options.BlockSize, min, numGridX, numGridY, spacing);
+        var totalBlocks = GetTotalBlocks(ionData, options.BlockSize, min, numGridX, numGridY, spacing, options.Decomposing);
 
         /*
          * Contingency Main
          */
-        outBuilder.AppendLine(CalculateContingencyTables(ionData, min, numGridX, numGridY, spacing, options.BlockSize, totalBlocks, rows, options.BinSize, viewBuilder));
+        outBuilder.AppendLine(CalculateContingencyTables(ionData, min, numGridX, numGridY, spacing, options.BlockSize, totalBlocks, rows, options.BinSize, viewBuilder, options.Decomposing));
 
         //Output the outBuilder string
         viewBuilder.AddText("3DCT Output", outBuilder.ToString());
@@ -105,6 +104,60 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     }
 
     /// <summary>
+    /// Creates two dictionaries for conversion between the AP Suite provided Ion "IDs" and this extension's Ion "IDs".
+    /// The first is a dictionary from bytes to a list of ints, which maps the AP Suite id to a list of this extension's ids. This is for
+    /// if the program is set to be decomposing the ions.
+    /// The second is a dictionary taking this extensions ids and mapping them to the atom names to which they correspond to. 
+    /// </summary>
+    /// <param name="ionData">IIonData object to read information from</param>
+    /// <returns>Two dictionaries containing conversion information between AP Suite and this extension</returns>
+    private static (Dictionary<byte, List<int>>, Dictionary<int, string>) GetConversionDicts(IIonData ionData)
+    {
+        //AP Suite byte to list of MY indices
+        Dictionary<byte, List<int>> apIndexToMyIndex = new();
+
+        //atom name to my index thing
+        Dictionary<string, int> nameToIndexDict = new();
+        Dictionary<int, string> indexToNameDict = new();
+
+        int index = 0;
+        var ionTypeInformationList = ionData.GetIonTypeCounts().Keys;
+        foreach(var ionTypeInfo in ionTypeInformationList)
+        {
+            var enumerator = ionTypeInfo.Formula.GetEnumerator();
+            while( enumerator.MoveNext())
+            {
+                var curr = enumerator.Current;
+                if(!nameToIndexDict.ContainsKey(curr.Key))
+                {
+                    nameToIndexDict.Add(curr.Key, index);
+                    indexToNameDict.Add(index, curr.Key);
+                    index++;
+                }
+            }
+        }
+
+        byte apIndex = 0;
+        foreach(var ionTypeInfo in ionTypeInformationList)
+        {
+            List<int> atomList = new();
+            var enumerator = ionTypeInfo.Formula.GetEnumerator();
+            while(enumerator.MoveNext())
+            {
+                var curr = enumerator.Current;
+                for(int i=0; i<curr.Value; i++)
+                {
+                    atomList.Add(nameToIndexDict[curr.Key]);
+                }
+            }
+            apIndexToMyIndex.Add(apIndex, atomList);
+            apIndex++;
+        }
+
+        return (apIndexToMyIndex, indexToNameDict);
+    }
+
+    /// <summary>
     /// Main contingency table method of this extension. This method is the main way that the extension looks into the actual ion data.
     /// In charge of calculating and displaying the contingency tables for this dataset. 
     /// </summary>
@@ -119,19 +172,31 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="binSize">The number of ions per bin</param>
     /// <param name="viewBuilder">IViewBuilder object to dipslay the information into tables</param>
     /// <returns>A formatted string of all of the contingency tables to be output to the "console" view</returns>
-    private static string CalculateContingencyTables(IIonData ionData, Vector3 min, int numGridX, int numGridY, double spacing, int blockSize, int totalBlocks, int rows, int binSize, IViewBuilder viewBuilder)
+    private static string CalculateContingencyTables(IIonData ionData, Vector3 min, int numGridX, int numGridY, double spacing, int blockSize, int totalBlocks, int rows, int binSize, IViewBuilder viewBuilder, bool isDecomposing)
     {
         StringBuilder outBuilder = new();
 
         string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
 
-        var numIonsTypes = ionData.GetIonTypeCounts().Count;
-        string[] ionNames = new string[numIonsTypes];
-        int index = 0;
-        foreach (var ionName in ionData.GetIonTypeCounts().Keys)
+        string[] ionNames;
+        (var apIndexToMyIndex, var indexToNameDict) = GetConversionDicts(ionData);
+        if (isDecomposing)
         {
-            ionNames[index] = ionName.Name;
-            index++;
+            ionNames = new string[indexToNameDict.Count];
+            foreach(var ionName in indexToNameDict)
+            {
+                ionNames[ionName.Key] = ionName.Value;
+            }
+        }
+        else
+        {
+            ionNames = new string[ionData.GetIonTypeCounts().Count];
+            int index = 0;
+            foreach (var ionName in ionData.GetIonTypeCounts().Keys)
+            {
+                ionNames[index] = ionName.Name;
+                index++;
+            }
         }
 
         //go through all ions once, populate tables, then compare each ion type
@@ -146,87 +211,53 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
 
             for (int ionIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
             {
-                byte elementType = ionTypes[ionIndex];
-                if (elementType == 255) continue;
+                byte simpleElementType = ionTypes[ionIndex];
+                if (simpleElementType == 255) continue;
+
+                Queue<int> ionQueue = new();
+
+                //if ion is multiatom
+                if (isDecomposing)
+                {
+                    foreach (var myIonIndex in apIndexToMyIndex[simpleElementType])
+                    {
+                        ionQueue.Enqueue(myIonIndex);
+                    }
+                }
+                else
+                    ionQueue.Enqueue(simpleElementType);
 
                 int ionX = (int)((positions[ionIndex].X - min.X) / spacing);
                 int ionY = (int)((positions[ionIndex].Y - min.Y) / spacing);
 
-                typeGrid[elementType, ionX, ionY]++;
-                ionGrid[ionX, ionY]++;
-
-                if (ionGrid[ionX, ionY] >= blockSize)
+                while (ionQueue.Count > 0)
                 {
-                    for (int i = 0; i < ionNames.Length; i++)
+                    int elementType = ionQueue.Dequeue();
+
+
+                    typeGrid[elementType, ionX, ionY]++;
+                    ionGrid[ionX, ionY]++;
+
+                    if (ionGrid[ionX, ionY] >= blockSize)
                     {
-                        typeBlock[i, blockIndex] = typeGrid[i, ionX, ionY];
-                        typeGrid[i, ionX, ionY] = 0;
+                        for (int i = 0; i < ionNames.Length; i++)
+                        {
+                            typeBlock[i, blockIndex] = typeGrid[i, ionX, ionY];
+                            typeGrid[i, ionX, ionY] = 0;
+                        }
+                        blockIndex++;
+                        ionGrid[ionX, ionY] = 0;
                     }
-                    blockIndex++;
-                    ionGrid[ionX, ionY] = 0;
                 }
             }
         }
-        for (int ionType1 = 0; ionType1 < numIonsTypes; ionType1++)
+        for (int ionType1 = 0; ionType1 < ionNames.Length; ionType1++)
         {
-            for (int ionType2 = ionType1 + 1; ionType2 < numIonsTypes; ionType2++)
+            for (int ionType2 = ionType1 + 1; ionType2 < ionNames.Length; ionType2++)
             {
                 outBuilder.AppendLine(CalculateContingencyTable(rows, typeBlock.GetRow(ionType1).ToArray(), typeBlock.GetRow(ionType2).ToArray(), totalBlocks, binSize, ionNames, ionType1, ionType2, blockSize, viewBuilder));
             }
         }
-
-
-        /*
-        //every combination of Ion Types needs its own contingency table
-        for (int ionType1 = 0; ionType1 < numIonsTypes; ionType1++)
-        {
-            for (int ionType2 = ionType1 + 1; ionType2 < numIonsTypes; ionType2++)
-            {
-
-                //these are the amount of blocks
-                int[] type1InBlock = new int[totalBlocks + 1];
-                int[] type2InBlock = new int[totalBlocks + 1];
-
-                //these are all the amount of grid elements
-                int[,] ionGrid = new int[numGridX, numGridY];
-                int[,] type1Grid = new int[numGridX, numGridY];
-                int[,] type2Grid = new int[numGridX, numGridY];
-
-                int blockIndex = 0;
-
-                foreach (var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
-                {
-                    var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
-                    var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
-
-
-                    for (int ionIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
-                    {
-                        byte elementType = ionTypes[ionIndex];
-                        if (elementType == 255) continue;
-
-                        int ionX = (int)((positions[ionIndex].X - min.X) / spacing);
-                        int ionY = (int)((positions[ionIndex].Y - min.Y) / spacing);
-
-                        if (elementType == ionType1) type1Grid[ionX, ionY]++;
-                        if (elementType == ionType2) type2Grid[ionX, ionY]++;
-                        ionGrid[ionX, ionY]++;
-
-                        if (ionGrid[ionX, ionY] >= blockSize)
-                        {
-                            type1InBlock[blockIndex] = type1Grid[ionX, ionY];
-                            type2InBlock[blockIndex] = type2Grid[ionX, ionY];
-                            blockIndex++;
-                            ionGrid[ionX, ionY] = 0;
-                            type1Grid[ionX, ionY] = 0;
-                            type2Grid[ionX, ionY] = 0;
-                        }
-                    }
-                }
-                outBuilder.AppendLine(CalculateContingencyTable(rows, type1InBlock, type2InBlock, totalBlocks, binSize, ionNames, ionType1, ionType2, blockSize, viewBuilder));
-            }
-        }
-        */
 
         return outBuilder.ToString();
     }
@@ -269,10 +300,6 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                 marginalTotalsCols[col] += (int)experimentalArr[row, col];
                 totalObservations += (int)experimentalArr[row, col];
             }
-        }
-        if(totalObservations <= 0)
-        {
-            //TODO: do something maybe
         }
 
         (var message, var non0Rows, var non0Cols) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, experimentalArr, dataTable, marginalTotalsRows, marginalTotalsCols, totalObservations, "Experimental Observations");
@@ -526,7 +553,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="numGridY">Number of grid elements in the Y direction</param>
     /// <param name="spacing">length of each block as computed from volume per block</param>
     /// <returns>The total number of blocks in this dataset given the block and bin size</returns>
-    private static int GetTotalBlocks(IIonData ionData, int blockSize, Vector3 min, int numGridX, int numGridY, double spacing)
+    private static int GetTotalBlocks(IIonData ionData, int blockSize, Vector3 min, int numGridX, int numGridY, double spacing, bool isDecomposing)
     {
         string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
 
@@ -538,22 +565,42 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
             var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
 
-            //get a count of the total amount of blocks
-            for(int i = 0; i < positions.Length; i++)
+            (var apIndexToMyIndex, var indexToNameDict) = GetConversionDicts(ionData);
+            for (int ionIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
             {
-                if (ionTypes[i] == 255) continue;
+                byte simpleElementType = ionTypes[ionIndex];
+                if (simpleElementType == 255) continue;
 
-                int ionX = (int)((positions[i].X - min.X) / spacing);
-                int ionY = (int)((positions[i].Y - min.Y) / spacing);
-                ionGrid[ionX, ionY]++;
-                if (ionGrid[ionX, ionY] == blockSize)
+                Queue<int> ionQueue = new();
+
+                //if ion is multiatom
+                if (isDecomposing)
                 {
-                    totalBlocks++;
-                    ionGrid[ionX, ionY] = 0;
+                    foreach (var myIonIndex in apIndexToMyIndex[simpleElementType])
+                    {
+                        ionQueue.Enqueue(myIonIndex);
+                    }
+                }
+                else
+                    ionQueue.Enqueue(simpleElementType);
+
+                int ionX = (int)((positions[ionIndex].X - min.X) / spacing);
+                int ionY = (int)((positions[ionIndex].Y - min.Y) / spacing);
+
+                while (ionQueue.Count > 0)
+                {
+                    int elementType = ionQueue.Dequeue();
+                    
+                    ionGrid[ionX, ionY]++;
+
+                    if (ionGrid[ionX, ionY] >= blockSize)
+                    {
+                        totalBlocks++;
+                        ionGrid[ionX, ionY] = 0;
+                    }
                 }
             }
         }
-
         return totalBlocks;
     }
 
@@ -589,28 +636,66 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="ionData">IIonData object to look at the ion information</param>
     /// <param name="viewBuilder">IViewBuilder object to display the basic ion data to the table</param>
     /// <returns></returns>
-    private static string GetBasicIonInfo(IIonData ionData, IViewBuilder viewBuilder)
+    private static (string, ulong) GetBasicIonInfo(IIonData ionData, IViewBuilder viewBuilder, bool isDecomposing)
     {
         StringBuilder outBuilder = new();
         List<RangeCountRow> rangeCountRows = new();
+        (var apIndexToMyIndex, var indexToNameDict) = GetConversionDicts(ionData);
         var typeCounts = ionData.GetIonTypeCounts();
         ulong totalRangedIons = 0;
-        for(int i=0; i<typeCounts.Count; i++)
-            totalRangedIons += typeCounts.ElementAt(i).Value;
-
-        for (int i=0; i<typeCounts.Count; i++)
+        for (int i = 0; i < typeCounts.Count; i++)
         {
-            var thisIon = typeCounts.ElementAt(i);
-            string percent = ((double)thisIon.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
-            rangeCountRows.Add(new RangeCountRow(i + 1, thisIon.Key.Name, thisIon.Value, percent));
-            outBuilder.AppendLine($"range {i + 1}: {thisIon.Key.Name} \t=\t{thisIon.Value}");
+            if(isDecomposing)
+            {
+                foreach(var myIonIndex in apIndexToMyIndex[(byte)i])
+                {
+                    totalRangedIons += typeCounts.ElementAt(i).Value;
+                }
+            }
+            else
+                totalRangedIons += typeCounts.ElementAt(i).Value;
         }
+
+        if(isDecomposing)
+        {
+            //myIndex to count
+            Dictionary<int, ulong> decomposedTypeCounts = new();
+            for(int i = 0; i < typeCounts.Count; i++)
+            {
+                foreach(var myIonIndex in apIndexToMyIndex[(byte)i])
+                {
+                    if (!decomposedTypeCounts.ContainsKey(myIonIndex))
+                        decomposedTypeCounts.Add(myIonIndex, 0);
+                    decomposedTypeCounts[myIonIndex] += typeCounts.ElementAt(i).Value;
+                }
+            }
+
+            int displayIndex = 1;
+            foreach(var decomposedTypeCount in decomposedTypeCounts)
+            {
+                string percent = ((double)decomposedTypeCount.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
+                rangeCountRows.Add(new RangeCountRow(displayIndex, indexToNameDict[decomposedTypeCount.Key], decomposedTypeCount.Value, percent));
+                outBuilder.AppendLine($"range {displayIndex}: {indexToNameDict[decomposedTypeCount.Key]} \t=\t{decomposedTypeCount.Value}");
+                displayIndex++;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < typeCounts.Count; i++)
+            {
+                var thisIon = typeCounts.ElementAt(i);
+                string percent = ((double)thisIon.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
+                rangeCountRows.Add(new RangeCountRow(i + 1, thisIon.Key.Name, thisIon.Value, percent));
+                outBuilder.AppendLine($"range {i + 1}: {thisIon.Key.Name} \t=\t{thisIon.Value}");
+            }
+        }
+
         outBuilder.AppendLine($"Total Ions \t=\t{ionData.IonCount}");
         outBuilder.AppendLine();
         outBuilder.AppendLine($"Ions in ranges = {totalRangedIons}, total events = {ionData.IonCount}");
 
         viewBuilder.AddTable("Range and Ion Info", rangeCountRows);
-        return outBuilder.ToString();
+        return (outBuilder.ToString(), totalRangedIons);
     }
 
     /// <summary>
