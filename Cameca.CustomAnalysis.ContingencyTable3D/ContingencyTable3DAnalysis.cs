@@ -63,6 +63,9 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         Vector3 diff = max - min;
         double volume = diff.X * diff.Y * diff.Z;
         double spacing = Math.Pow(volume * options.BlockSize / totalRangedIons, 1.0 / 3.0); //take cube root of volume per block to get length of block
+
+        outBuilder.AppendLine($"Grid spacing = {spacing.ToString("f1")}");
+
         int numGridX = (int)(diff.X / spacing) + 1;
         int numGridY = (int)(diff.Y / spacing) + 1;
         int rows = (options.BlockSize + 1) / options.BinSize;
