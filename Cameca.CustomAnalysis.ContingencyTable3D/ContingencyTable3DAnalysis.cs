@@ -61,8 +61,8 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         var min = ionData.Extents.Min;
         var max = ionData.Extents.Max;
         Vector3 diff = max - min;
-        double volume = diff.X * diff.Y * diff.Z;
-        double spacing = Math.Pow(volume * options.BlockSize / totalRangedIons, 1.0 / 3.0); //take cube root of volume per block to get length of block
+        float volume = diff.X * diff.Y * diff.Z;
+        float spacing = MathF.Pow(volume * options.BlockSize / totalRangedIons, 1.0f / 3.0f); //take cube root of volume per block to get length of block
 
         outBuilder.AppendLine($"Grid spacing = {spacing.ToString("f1")}");
 
@@ -175,7 +175,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="binSize">The number of ions per bin</param>
     /// <param name="viewBuilder">IViewBuilder object to dipslay the information into tables</param>
     /// <returns>A formatted string of all of the contingency tables to be output to the "console" view</returns>
-    private static string CalculateContingencyTables(IIonData ionData, Vector3 min, int numGridX, int numGridY, double spacing, int blockSize, int totalBlocks, int rows, int binSize, IViewBuilder viewBuilder, bool isDecomposing)
+    private static string CalculateContingencyTables(IIonData ionData, Vector3 min, int numGridX, int numGridY, float spacing, int blockSize, int totalBlocks, int rows, int binSize, IViewBuilder viewBuilder, bool isDecomposing)
     {
         StringBuilder outBuilder = new();
 
@@ -284,7 +284,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         StringBuilder sb = new();
         DataTable dataTable = InitDataTable(rows);
 
-        double[,] experimentalArr = new double[rows, rows];
+        float[,] experimentalArr = new float[rows, rows];
         int totalObservations = 0;
 
         for(int i=0; i<totalBlocks; i++)
@@ -309,12 +309,12 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         sb.AppendLine(message);
 
         //calculate estimated observations
-        double[,] estimatedArr = new double[rows, rows];
+        float[,] estimatedArr = new float[rows, rows];
         for (int row = 0; row < rows; row++)
         {
             for(int col = 0; col < rows; col++)
             {
-                estimatedArr[row, col] =  ((double)marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
+                estimatedArr[row, col] =  ((float)marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
             }
         }
         (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, estimatedArr, dataTable, "Estimated Values");
@@ -324,7 +324,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         sb.AppendLine(CalculateXSquare(rows, experimentalArr, estimatedArr, non0Rows, non0Cols));
 
         //calculate and output difference values
-        double[,] differenceArr = new double[rows, rows];
+        float[,] differenceArr = new float[rows, rows];
         for(int row = 0; row < rows; row++)
         {
             for(int col = 0; col < rows; col++)
@@ -348,7 +348,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="differenceArr">An array containing the differences in the blocks and bins</param>
     /// <param name="dataTable">DataTable object to add row and overall table information to to display to user</param>
     /// <returns>A formatted string showing the trend analysis table in the "console" view</returns>
-    private static string TrendAnalysis(double[,] differenceArr, DataTable dataTable)
+    private static string TrendAnalysis(float[,] differenceArr, DataTable dataTable)
     {
         StringBuilder sb = new();
 
@@ -399,13 +399,13 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="non0Rows">The number of non zero rows in this table</param>
     /// <param name="non0Cols">The number of non zero columns in this table</param>
     /// <returns>A formatted string to display the relevent X-squared data</returns>
-    private static string CalculateXSquare(int rows, double[,] experimentalArr, double[,] estimatedArr, int non0Rows, int non0Cols)
+    private static string CalculateXSquare(int rows, float[,] experimentalArr, float[,] estimatedArr, int non0Rows, int non0Cols)
     {
-        double[] P = { 0.250f, 0.1f, 0.05f, 0.025f, 0.01f, 0.005f, 0.001f };
-        double[] X = { 0.6745f, 1.2816f, 1.6449f, 1.96f, 2.3263f, 2.5758f, 3.0902f };
+        float[] P = { 0.250f, 0.1f, 0.05f, 0.025f, 0.01f, 0.005f, 0.001f };
+        float[] X = { 0.6745f, 1.2816f, 1.6449f, 1.96f, 2.3263f, 2.5758f, 3.0902f };
 
         StringBuilder sb = new();
-        double xSquare = 0;
+        float xSquare = 0;
 
         for (int row = 0; row < rows; row++)
         {
@@ -425,7 +425,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         {
             for(int i=0; i<X.Length; i++)
             {
-                double value = .5 * (X[i] + Math.Sqrt(2 * reduced - 1)) * (X[i] + Math.Sqrt(2 * reduced - 1));
+                float value = .5f * (X[i] + MathF.Sqrt(2 * reduced - 1)) * (X[i] + MathF.Sqrt(2 * reduced - 1));
                 sb.Append($"P({P[i].ToString($"f{ROUNDING_LENGTH}")}) = {value.ToString($"f{ROUNDING_LENGTH - 1}")}");
                 if (i < X.Length - 1)
                     sb.Append(", ");
@@ -449,7 +449,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="dataTable">A DataTable object to display this table into</param>
     /// <param name="title">Title of the table being displayed</param>
     /// <returns></returns>
-    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, double[,] dataArray, DataTable dataTable, string title)
+    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, float[,] dataArray, DataTable dataTable, string title)
     {
         return PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, dataArray, dataTable, null, null, -1, title);
     }
@@ -470,7 +470,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="totalObservations">Total number of ions "observed" in this given table</param>
     /// <param name="title">Title of the table being displayed</param>
     /// <returns>A formatted string displaying the table for the "console" view</returns>
-    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, double[,] dataArray, DataTable dataTable, int[]? marginalTotalRows, int[]? marginalTotalCols, int totalObservations, string title)
+    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, float[,] dataArray, DataTable dataTable, int[]? marginalTotalRows, int[]? marginalTotalCols, int totalObservations, string title)
     {
         StringBuilder sb = new();
         int non0Cols = 0;
@@ -556,7 +556,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="numGridY">Number of grid elements in the Y direction</param>
     /// <param name="spacing">length of each block as computed from volume per block</param>
     /// <returns>The total number of blocks in this dataset given the block and bin size</returns>
-    private static int GetTotalBlocks(IIonData ionData, int blockSize, Vector3 min, int numGridX, int numGridY, double spacing, bool isDecomposing)
+    private static int GetTotalBlocks(IIonData ionData, int blockSize, Vector3 min, int numGridX, int numGridY, float spacing, bool isDecomposing)
     {
         string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
 
@@ -676,7 +676,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             int displayIndex = 1;
             foreach(var decomposedTypeCount in decomposedTypeCounts)
             {
-                string percent = ((double)decomposedTypeCount.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
+                string percent = ((float)decomposedTypeCount.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
                 rangeCountRows.Add(new RangeCountRow(displayIndex, indexToNameDict[decomposedTypeCount.Key], decomposedTypeCount.Value, percent));
                 outBuilder.AppendLine($"range {displayIndex}: {indexToNameDict[decomposedTypeCount.Key]} \t=\t{decomposedTypeCount.Value}");
                 displayIndex++;
@@ -687,7 +687,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             for (int i = 0; i < typeCounts.Count; i++)
             {
                 var thisIon = typeCounts.ElementAt(i);
-                string percent = ((double)thisIon.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
+                string percent = ((float)thisIon.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
                 rangeCountRows.Add(new RangeCountRow(i + 1, thisIon.Key.Name, thisIon.Value, percent));
                 outBuilder.AppendLine($"range {i + 1}: {thisIon.Key.Name} \t=\t{thisIon.Value}");
             }
