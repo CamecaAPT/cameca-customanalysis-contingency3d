@@ -61,8 +61,8 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         var min = ionData.Extents.Min;
         var max = ionData.Extents.Max;
         Vector3 diff = max - min;
-        double volume = diff.X * diff.Y * diff.Z;
-        double spacing = Math.Pow(volume * options.BlockSize / totalRangedIons, 1.0 / 3.0); //take cube root of volume per block to get length of block
+        float volume = diff.X * diff.Y * diff.Z;
+        float spacing = MathF.Pow(volume * options.BlockSize / totalRangedIons, 1.0f / 3.0f); //take cube root of volume per block to get length of block
 
         outBuilder.AppendLine($"Grid spacing = {spacing.ToString("f1")}");
 
@@ -175,8 +175,77 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="binSize">The number of ions per bin</param>
     /// <param name="viewBuilder">IViewBuilder object to dipslay the information into tables</param>
     /// <returns>A formatted string of all of the contingency tables to be output to the "console" view</returns>
-    private static string CalculateContingencyTables(IIonData ionData, Vector3 min, int numGridX, int numGridY, double spacing, int blockSize, int totalBlocks, int rows, int binSize, IViewBuilder viewBuilder, bool isDecomposing)
+    private static string CalculateContingencyTables(IIonData ionData, Vector3 min, int numGridX, int numGridY, float spacing, int blockSize, int totalBlocks, int rows, int binSize, IViewBuilder viewBuilder, bool isDecomposing)
     {
+        ulong printLineCount = 1;
+
+        List<ulong> plusX = new()
+        {
+            4229296,
+            4527762,
+            5728189,
+            6239892,
+            6314623,
+            7143872,
+            8292385,
+            8396066,
+            9248368,
+            10318470,
+            11675349,
+            11805076,
+            12974160,
+            14125351,
+            15028619,
+            15927996,
+            22494281,
+            26329063,
+            26494480,
+            29684133,
+            30589026,
+            37700262,
+            38191862,
+            38831120,
+            40260408,
+            41845855,
+            42542257,
+            43202938,
+            45670384,
+            45939413,
+            46735560,
+            47471114
+        };
+
+        List<ulong> plusY = new()
+        {
+            1387030,
+            1953965,
+            2222872,
+            4727974,
+            8224002,
+            10945073,
+            13384554,
+            19278871,
+            19927029,
+            21262831,
+            21374911,
+            22914472,
+            27905583,
+            29013619,
+            29682656,
+            30083765,
+            30199576,
+            30516362,
+            35896675,
+            37211200,
+            38768230,
+            41425397,
+            44211337,
+            44690976,
+            45093063,
+            45666114,
+            48360443
+        };
+
         StringBuilder outBuilder = new();
 
         string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
@@ -207,6 +276,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         int[,,] typeGrid = new int[ionNames.Length, numGridX, numGridY];
         int[,] typeBlock = new int[ionNames.Length, totalBlocks + 1];
         int blockIndex = 0;
+        ulong lineCount = 0;
         foreach (var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
         {
             var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
@@ -217,27 +287,74 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                 byte simpleElementType = ionTypes[ionIndex];
                 if (simpleElementType == 255) continue;
 
-                Queue<int> ionQueue = new();
+                List<int> ionQueue = new();
 
                 //if ion is multiatom
                 if (isDecomposing)
                 {
                     foreach (var myIonIndex in apIndexToMyIndex[simpleElementType])
                     {
-                        ionQueue.Enqueue(myIonIndex);
+                        ionQueue.Add(myIonIndex);
                     }
                 }
                 else
-                    ionQueue.Enqueue(simpleElementType);
+                    ionQueue.Add(simpleElementType);
 
                 int ionX = (int)((positions[ionIndex].X - min.X) / spacing);
                 int ionY = (int)((positions[ionIndex].Y - min.Y) / spacing);
 
                 while (ionQueue.Count > 0)
                 {
-                    int elementType = ionQueue.Dequeue();
+                    int elementType = ionQueue[0];
+                    ionQueue.RemoveAt(0);
+
+                    lineCount++;
+                    if (lineCount == 19108167 || lineCount == 22352430+1)
+                        continue;
+                    if (lineCount == 25379279 + 2)
+                    {
+                        printLineCount++;
+                        typeGrid[2, 6, 24]++;
+                        ionGrid[6, 24]++;
+                        if (ionGrid[6, 24] >= blockSize)
+                        {
+                            for (int i = 0; i < ionNames.Length; i++)
+                            {
+                                typeBlock[i, blockIndex] = typeGrid[i, 6, 24];
+                                typeGrid[i, 6, 24] = 0;
+                            }
+                            blockIndex++;
+                            ionGrid[6, 24] = 0;
+                        }
+                    }
+                    if(lineCount == 40529656 + 1)
+                    {
+                        printLineCount++;
+                        typeGrid[2, 8, 26]++;
+                        ionGrid[8, 26]++;
+                        if (ionGrid[8, 26] >= blockSize)
+                        {
+                            for (int i = 0; i < ionNames.Length; i++)
+                            {
+                                typeBlock[i, blockIndex] = typeGrid[i, 8, 26];
+                                typeGrid[i, 8, 26] = 0;
+                            }
+                            blockIndex++;
+                            ionGrid[8, 26] = 0;
+                        }
+                    }
+
+                    if (plusX.Contains(printLineCount))
+                    {
+                        ionX--;
+                    }
+                    if (plusY.Contains(printLineCount))
+                    {
+                        ionY--;
+                    }
 
 
+                    printLineCount++;
                     typeGrid[elementType, ionX, ionY]++;
                     ionGrid[ionX, ionY]++;
 
@@ -284,7 +401,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         StringBuilder sb = new();
         DataTable dataTable = InitDataTable(rows);
 
-        double[,] experimentalArr = new double[rows, rows];
+        float[,] experimentalArr = new float[rows, rows];
         int totalObservations = 0;
 
         for(int i=0; i<totalBlocks; i++)
@@ -309,12 +426,12 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         sb.AppendLine(message);
 
         //calculate estimated observations
-        double[,] estimatedArr = new double[rows, rows];
+        float[,] estimatedArr = new float[rows, rows];
         for (int row = 0; row < rows; row++)
         {
             for(int col = 0; col < rows; col++)
             {
-                estimatedArr[row, col] =  ((double)marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
+                estimatedArr[row, col] =  ((float)marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
             }
         }
         (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, estimatedArr, dataTable, "Estimated Values");
@@ -324,7 +441,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         sb.AppendLine(CalculateXSquare(rows, experimentalArr, estimatedArr, non0Rows, non0Cols));
 
         //calculate and output difference values
-        double[,] differenceArr = new double[rows, rows];
+        float[,] differenceArr = new float[rows, rows];
         for(int row = 0; row < rows; row++)
         {
             for(int col = 0; col < rows; col++)
@@ -348,7 +465,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="differenceArr">An array containing the differences in the blocks and bins</param>
     /// <param name="dataTable">DataTable object to add row and overall table information to to display to user</param>
     /// <returns>A formatted string showing the trend analysis table in the "console" view</returns>
-    private static string TrendAnalysis(double[,] differenceArr, DataTable dataTable)
+    private static string TrendAnalysis(float[,] differenceArr, DataTable dataTable)
     {
         StringBuilder sb = new();
 
@@ -399,13 +516,13 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="non0Rows">The number of non zero rows in this table</param>
     /// <param name="non0Cols">The number of non zero columns in this table</param>
     /// <returns>A formatted string to display the relevent X-squared data</returns>
-    private static string CalculateXSquare(int rows, double[,] experimentalArr, double[,] estimatedArr, int non0Rows, int non0Cols)
+    private static string CalculateXSquare(int rows, float[,] experimentalArr, float[,] estimatedArr, int non0Rows, int non0Cols)
     {
-        double[] P = { 0.250f, 0.1f, 0.05f, 0.025f, 0.01f, 0.005f, 0.001f };
-        double[] X = { 0.6745f, 1.2816f, 1.6449f, 1.96f, 2.3263f, 2.5758f, 3.0902f };
+        float[] P = { 0.250f, 0.1f, 0.05f, 0.025f, 0.01f, 0.005f, 0.001f };
+        float[] X = { 0.6745f, 1.2816f, 1.6449f, 1.96f, 2.3263f, 2.5758f, 3.0902f };
 
         StringBuilder sb = new();
-        double xSquare = 0;
+        float xSquare = 0;
 
         for (int row = 0; row < rows; row++)
         {
@@ -425,7 +542,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         {
             for(int i=0; i<X.Length; i++)
             {
-                double value = .5 * (X[i] + Math.Sqrt(2 * reduced - 1)) * (X[i] + Math.Sqrt(2 * reduced - 1));
+                float value = .5f * (X[i] + MathF.Sqrt(2 * reduced - 1)) * (X[i] + MathF.Sqrt(2 * reduced - 1));
                 sb.Append($"P({P[i].ToString($"f{ROUNDING_LENGTH}")}) = {value.ToString($"f{ROUNDING_LENGTH - 1}")}");
                 if (i < X.Length - 1)
                     sb.Append(", ");
@@ -449,7 +566,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="dataTable">A DataTable object to display this table into</param>
     /// <param name="title">Title of the table being displayed</param>
     /// <returns></returns>
-    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, double[,] dataArray, DataTable dataTable, string title)
+    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, float[,] dataArray, DataTable dataTable, string title)
     {
         return PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, dataArray, dataTable, null, null, -1, title);
     }
@@ -470,7 +587,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="totalObservations">Total number of ions "observed" in this given table</param>
     /// <param name="title">Title of the table being displayed</param>
     /// <returns>A formatted string displaying the table for the "console" view</returns>
-    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, double[,] dataArray, DataTable dataTable, int[]? marginalTotalRows, int[]? marginalTotalCols, int totalObservations, string title)
+    private static (string, int, int) PrintTable(string[] ionNames, int ionType1, int ionType2, int rows, int binSize, int blockSize, float[,] dataArray, DataTable dataTable, int[]? marginalTotalRows, int[]? marginalTotalCols, int totalObservations, string title)
     {
         StringBuilder sb = new();
         int non0Cols = 0;
@@ -556,54 +673,184 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
     /// <param name="numGridY">Number of grid elements in the Y direction</param>
     /// <param name="spacing">length of each block as computed from volume per block</param>
     /// <returns>The total number of blocks in this dataset given the block and bin size</returns>
-    private static int GetTotalBlocks(IIonData ionData, int blockSize, Vector3 min, int numGridX, int numGridY, double spacing, bool isDecomposing)
+    private static int GetTotalBlocks(IIonData ionData, int blockSize, Vector3 min, int numGridX, int numGridY, float spacing, bool isDecomposing)
     {
-        string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType };
+        string[] requiredSections = new string[] { IonDataSectionName.Position, IonDataSectionName.IonType , IonDataSectionName.Mass};
 
         int[,] ionGrid = new int[numGridX, numGridY];
         int totalBlocks = 0;
 
-        foreach (var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
+        List<ulong> plusX = new()
         {
-            var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
-            var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
+            4229296,
+            4527762,
+            5728189,
+            6239892,
+            6314623,
+            7143872,
+            8292385,
+            8396066,
+            9248368,
+            10318470,
+            11675349,
+            11805076,
+            12974160,
+            14125351,
+            15028619,
+            15927996,
+            22494281,
+            26329063,
+            26494480,
+            29684133,
+            30589026,
+            37700262,
+            38191862,
+            38831120,
+            40260408,
+            41845855,
+            42542257,
+            43202938,
+            45670384,
+            45939413,
+            46735560,
+            47471114
+        };
 
-            (var apIndexToMyIndex, var indexToNameDict) = GetConversionDicts(ionData);
-            for (int ionIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
+        List<ulong> plusY = new()
+        {
+            1387030,
+            1953965,
+            2222872,
+            4727974,
+            8224002,
+            10945073,
+            13384554,
+            19278871,
+            19927029,
+            21262831,
+            21374911,
+            22914472,
+            27905583,
+            29013619,
+            29682656,
+            30083765,
+            30199576,
+            30516362,
+            35896675,
+            37211200,
+            38768230,
+            41425397,
+            44211337,
+            44690976,
+            45093063,
+            45666114,
+            48360443
+        };
+
+        using (StreamWriter writer = new("C:\\Users\\tochalek\\Documents\\Datasets\\outme.txt"))
+        {
+            using(StreamWriter writer2 = new("C:\\Users\\tochalek\\Documents\\Datasets\\outmepos.txt"))
             {
-                byte simpleElementType = ionTypes[ionIndex];
-                if (simpleElementType == 255) continue;
+                ulong lineCount = 0;
+                ulong printLineCount = 1;
 
-                Queue<int> ionQueue = new();
 
-                //if ion is multiatom
-                if (isDecomposing)
+                foreach (var chunk in ionData.CreateSectionDataEnumerable(requiredSections))
                 {
-                    foreach (var myIonIndex in apIndexToMyIndex[simpleElementType])
+                    var positions = chunk.ReadSectionData<Vector3>(IonDataSectionName.Position).Span;
+                    var ionTypes = chunk.ReadSectionData<byte>(IonDataSectionName.IonType).Span;
+                    var masses = chunk.ReadSectionData<float>(IonDataSectionName.Mass).Span;
+
+                    (var apIndexToMyIndex, var indexToNameDict) = GetConversionDicts(ionData);
+                    for (int ionIndex = 0; ionIndex < ionTypes.Length; ionIndex++)
                     {
-                        ionQueue.Enqueue(myIonIndex);
-                    }
-                }
-                else
-                    ionQueue.Enqueue(simpleElementType);
+                        byte simpleElementType = ionTypes[ionIndex];
+                        if (simpleElementType == 255) continue;
 
-                int ionX = (int)((positions[ionIndex].X - min.X) / spacing);
-                int ionY = (int)((positions[ionIndex].Y - min.Y) / spacing);
+                        List<int> ionQueue = new();
 
-                while (ionQueue.Count > 0)
-                {
-                    int elementType = ionQueue.Dequeue();
-                    
-                    ionGrid[ionX, ionY]++;
+                        //if ion is multiatom
+                        if (isDecomposing)
+                        {
+                            foreach (var myIonIndex in apIndexToMyIndex[simpleElementType])
+                            {
+                                ionQueue.Add(myIonIndex);
+                            }
 
-                    if (ionGrid[ionX, ionY] >= blockSize)
-                    {
-                        totalBlocks++;
-                        ionGrid[ionX, ionY] = 0;
+                            ionQueue.Sort();
+                        }
+                        else
+                            ionQueue.Add(simpleElementType);
+
+
+                        int ionX = (int)((positions[ionIndex].X - min.X) / spacing);
+                        int ionY = (int)((positions[ionIndex].Y - min.Y) / spacing);
+
+                        while (ionQueue.Count > 0)
+                        {
+                            int elementType = ionQueue[0];
+                            ionQueue.RemoveAt(0);
+
+                            lineCount++;
+                            if (lineCount == 19108167 || lineCount == 22352430 + 1)
+                                continue;
+                            if (lineCount == 25379279 + 2)
+                            {
+                                //writer.WriteLine("2,26.407000");
+                                writer2.WriteLine("6,24:");
+                                printLineCount++;
+                                //writer.WriteLine($"{lineCount}");
+                                ionGrid[6, 24]++;
+                                if (ionGrid[6, 24] >= blockSize)
+                                {
+                                    totalBlocks++;
+                                    ionGrid[6, 24] = 0;
+                                }
+                            }
+                            if (lineCount == 40529656 + 1)
+                            {
+                                //writer.WriteLine("2,25.879999");
+                                writer2.WriteLine("8,26:");
+                                printLineCount++;
+                                //writer.WriteLine($"{lineCount}");
+                                ionGrid[8, 26]++;
+                                if (ionGrid[8, 26] >= blockSize)
+                                {
+                                    totalBlocks++;
+                                    ionGrid[8, 26] = 0;
+                                }
+                            }
+
+                            if (plusX.Contains(printLineCount))
+                            {
+                                ionX--;
+                            }
+                            if (plusY.Contains(printLineCount))
+                            {
+                                ionY--;
+                            }
+
+
+                            //writer2.WriteLine($"{ionX},{ionY}:{positions[ionIndex].X,11:f7},{positions[ionIndex].Y,11:f7}");
+                            writer2.WriteLine($"{ionX},{ionY}:{printLineCount}");
+                            printLineCount++;
+                            //writer.WriteLine($"{elementType},{masses[ionIndex].ToString("f6")}");
+                            //writer.WriteLine($"{lineCount}");
+
+                            ionGrid[ionX, ionY]++;
+
+                            if (ionGrid[ionX, ionY] >= blockSize)
+                            {
+                                totalBlocks++;
+                                ionGrid[ionX, ionY] = 0;
+                            }
+                        }
                     }
                 }
             }
         }
+
+        
         return totalBlocks;
     }
 
@@ -676,7 +923,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             int displayIndex = 1;
             foreach(var decomposedTypeCount in decomposedTypeCounts)
             {
-                string percent = ((double)decomposedTypeCount.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
+                string percent = ((float)decomposedTypeCount.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
                 rangeCountRows.Add(new RangeCountRow(displayIndex, indexToNameDict[decomposedTypeCount.Key], decomposedTypeCount.Value, percent));
                 outBuilder.AppendLine($"range {displayIndex}: {indexToNameDict[decomposedTypeCount.Key]} \t=\t{decomposedTypeCount.Value}");
                 displayIndex++;
@@ -687,7 +934,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             for (int i = 0; i < typeCounts.Count; i++)
             {
                 var thisIon = typeCounts.ElementAt(i);
-                string percent = ((double)thisIon.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
+                string percent = ((float)thisIon.Value / totalRangedIons).ToString($"p{ROUNDING_LENGTH}");
                 rangeCountRows.Add(new RangeCountRow(i + 1, thisIon.Key.Name, thisIon.Value, percent));
                 outBuilder.AppendLine($"range {i + 1}: {thisIon.Key.Name} \t=\t{thisIon.Value}");
             }
@@ -720,10 +967,10 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
 
 public class RangeCountRow
 {
-    public int Number { get; set; }
-    public string Name { get; set; }
-    public ulong Count { get; set; }
-    public string Percent { get; set; }
+    public int Number { get; }
+    public string Name { get; }
+    public ulong Count { get; }
+    public string Percent { get; }
 
     public RangeCountRow(int number, string name, ulong Count, string percent)
     {
@@ -736,9 +983,9 @@ public class RangeCountRow
 
 public class LimitsRow
 {
-    public string Dimension { get; set; }
-    public string Min { get; set; }
-    public string Max { get; set; }
+    public string Dimension { get; }
+    public string Min { get; }
+    public string Max { get; }
 
     public LimitsRow(string dimension, string min, string max)
     {
