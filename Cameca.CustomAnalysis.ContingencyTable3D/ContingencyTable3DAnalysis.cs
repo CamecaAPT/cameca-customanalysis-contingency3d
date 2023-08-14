@@ -314,7 +314,11 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
         {
             for(int col = 0; col < rows; col++)
             {
-                estimatedArr[row, col] =  ((float)marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
+                //get rid of that diagonal
+                if (row + col >= rows)
+                    estimatedArr[row, col] = 0;
+                else
+                    estimatedArr[row, col] =  ((float)marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
             }
         }
         (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, estimatedArr, dataTable, "Estimated Values");
@@ -512,8 +516,21 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             for(int col = 0; col < rows; col++)
             {
                 string formatString = (marginalTotalCols == null) ? "f1" : "";
-                sb.Append($"{dataArray[row, col].ToString($"{formatString}")}\t");
-                rowArray[col + 1] = dataArray[row, col].ToString(formatString);
+                if (row + col >= dataArray.GetLength(0))
+                {
+                    sb.Append("");
+                    rowArray[col + 1] = "";
+
+                    if (dataArray[row, col] != 0)
+                    {
+
+                    }
+                }
+                else
+                {
+                    sb.Append($"{dataArray[row, col].ToString($"{formatString}")}\t");
+                    rowArray[col + 1] = dataArray[row, col].ToString(formatString);
+                }
             }
             if (marginalTotalRows != null && marginalTotalRows[row] > 0) 
                 non0Rows++;
