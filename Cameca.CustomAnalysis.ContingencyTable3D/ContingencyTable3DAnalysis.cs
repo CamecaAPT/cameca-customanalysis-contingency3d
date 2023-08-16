@@ -305,7 +305,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
             }
         }
 
-        (var message, var non0Rows, var non0Cols) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, experimentalArr, dataTable, marginalTotalsRows, marginalTotalsCols, totalObservations, "Experimental Observations");
+        (var message, var non0Rows, var non0Cols) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, experimentalArr, dataTable, marginalTotalsRows, marginalTotalsCols, totalObservations, "Experimental (bins)");
         sb.AppendLine(message);
 
         //calculate estimated observations
@@ -321,7 +321,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                     estimatedArr[row, col] =  ((float)marginalTotalsRows[row] * marginalTotalsCols[col]) / totalObservations;
             }
         }
-        (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, estimatedArr, dataTable, "Estimated Values");
+        (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, estimatedArr, dataTable, "Estimated (bins)");
         sb.AppendLine(message);
 
         //calculate X-square
@@ -336,7 +336,7 @@ internal class ContingencyTable3DAnalysis : ICustomAnalysis<ContingencyTable3DOp
                 differenceArr[row, col] = experimentalArr[row, col] - estimatedArr[row, col];
             }
         }
-        (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, differenceArr, dataTable, "Difference Values");
+        (message, _, _) = PrintTable(ionNames, ionType1, ionType2, rows, binSize, blockSize, differenceArr, dataTable, "Difference Values (bins)");
         sb.AppendLine(message);
 
         //Do Trend Analysis
